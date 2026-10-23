@@ -19,6 +19,7 @@ async def test_create_ticket_is_201_and_classified_by_rules_when_ai_off(client, 
     assert body["category"] == "ROYALTY_PAYMENTS"
     assert body["priority"] == "CRITICAL"  # "6 months" of missing money → top of the rubric
     assert "Rule-based" in body["ai"]["reasoning"]
+    assert body["book_detail"]["royalty_pending"] == "3570.00"  # admin sees real numbers next to the AI draft
 
 
 async def test_general_ticket_without_book(client, author_h):

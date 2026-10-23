@@ -17,6 +17,7 @@ from app.models.enums import (
     TicketStatus,
 )
 from app.models.ticket import Attachment, Ticket, TicketMessage
+from app.schemas.books import BookOut
 from app.schemas.common import ApiModel
 
 GENERAL_BOOK_ID = None  # "General / Account Level" is represented by book_id = null
@@ -203,6 +204,8 @@ class AdminTicketOut(TicketOut):
 
     ai: AiMeta
     ai_draft: str | None
+    # Full royalty facts for the linked book, so the admin can check the draft against real numbers.
+    book_detail: BookOut | None
 
     @classmethod
     def from_model(cls, t: Ticket, *, admin: bool = True) -> AdminTicketOut:
@@ -210,6 +213,7 @@ class AdminTicketOut(TicketOut):
         return cls(
             **base,
             ai_draft=t.ai_draft,
+            book_detail=BookOut.from_model(t.book) if t.book else None,
             ai=AiMeta(
                 status=t.ai_status,
                 category=t.ai_category,
