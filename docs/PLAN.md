@@ -18,7 +18,7 @@ API design 15%, functionality 15%, product thinking 10%, docs 10%.
 | DB | PostgreSQL (Docker locally, Neon free tier in prod) | Relational schema is the point (authors→books→tickets→messages); Alembic for migrations, a seed script for the JSON dataset |
 | Auth | Email/password, bcrypt, JWT bearer (access token in memory + httpOnly refresh cookie), FastAPI dependency `get_current_user` / `require_role` | Simple, no third-party auth; RBAC via `role` claim enforced in dependencies and at the repository layer |
 | Validation | Pydantic request/response models on every route; shared error envelope `{ "error": { "code", "message", "details" } }` via exception handlers | Meaningful 400/401/403/404/409/422 instead of generic 500s |
-| AI | Anthropic Claude Haiku 4.5 via the `anthropic` Python SDK, backend-only | Cheap, fast, strict JSON via tool-use; prompt caching for the static knowledge base |
+| AI | Anthropic Claude Haiku 5.5 via the `anthropic` Python SDK, backend-only | Cheapest current model; structured outputs; 512-token cache minimum so the KB block actually caches |
 | Real-time | SSE via `sse-starlette`; in-process async broker publishes ticket events; `EventSource` on the client with auto-reconnect; polling fallback | Native in FastAPI, no extra infra; Redis pub/sub upgrade path for multi-instance noted in the write-up |
 | API docs | FastAPI-generated OpenAPI at `/docs` and `/openapi.json` + README endpoint table | Explicit requirement, zero manual drift |
 | Deploy | Vercel (frontend) + Render free web service (backend, Dockerfile) + Neon (db) | All free; Render free tier cold-starts after idle (~30–50 s) — noted in README; Railway is a drop-in alternative |
@@ -180,10 +180,12 @@ bookleaf-support-portal/
 
 ---
 
-## 8. Open inputs needed from you
+## 8. Status (2026-10-23) and open inputs
 
-1. ~~Stack~~ → Next.js + FastAPI (confirmed 2026-10-23).
-2. `ANTHROPIC_API_KEY` for `backend/.env` (confirmed provider; key still needed).
-3. Accounts for Vercel, Render and Neon (free; I can drive the CLIs once you log in).
-4. ~~Repo~~ → `github.com/yash564/bookleaf-support-portal`, local `/Users/yash/bookleaf-support-portal`,
-   commits authored as yash564 (noreply email). Confirmed.
+Done and pushed: backend (API, AI layer, SSE, 37 tests, Dockerfile), frontend (both portals), README,
+`docs/ARCHITECTURE.md`, `docs/WRITEUP.md`, `render.yaml`.
+
+Still needed from you:
+1. `ANTHROPIC_API_KEY` in `backend/.env` (everything runs without it on the rule-based fallback).
+2. Neon + Render + Vercel accounts for the live URL (steps in README → Deployment), then paste the URLs into the README.
+3. The evaluators' collaborator email, to add to the GitHub repo.
