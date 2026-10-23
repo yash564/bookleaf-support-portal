@@ -1,0 +1,25 @@
+# Render blueprint: one Docker web service for the API. Create a free Postgres on Neon (or Render)
+# and set DATABASE_URL in the dashboard; everything else is here. Frontend goes to Vercel.
+services:
+  - type: web
+    name: bookleaf-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SEED_ON_START
+        value: "true"       # seeds the evaluators' dataset on first boot; set to false afterwards
+      - key: DATABASE_URL
+        sync: false         # postgresql+asyncpg://... (Neon)
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false         # https://<your-vercel-app>.vercel.app
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-5-5
