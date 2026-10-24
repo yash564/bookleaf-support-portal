@@ -50,15 +50,21 @@ async def draft_reply(ticket: Ticket, *, agent_name: str, today: date | None = N
     async def _call(client):
         resp = await client.messages.create(
             model=s.anthropic_model,
-            max_tokens=1024,
+            max_tokens=2048,
             # Static block (persona + KB + examples) is cache-marked; only `user` varies per ticket.
             system=[{"type": "text", "text": DRAFT_SYSTEM, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user}],
+            # A 150-250 word support reply doesn't benefit from extended thinking, and thinking tokens
+            # count against max_tokens (a 1,024 cap truncated drafts mid-sentence). Haiku 5.5 allows
+            # disabling it at effort <= high.
+            thinking={"type": "disabled"},
             output_config={"effort": "medium"},
         )
         text = "".join(b.text for b in resp.content if b.type == "text").strip()
         if not text:
             raise ValueError(f"empty draft (stop_reason={resp.stop_reason})")
+        if resp.stop_reason == "max_tokens":
+            raise ValueError("draft truncated at max_tokens")  # better no draft than a cut-off one
         return text, resp.usage
 
     return await invoke(_call)
