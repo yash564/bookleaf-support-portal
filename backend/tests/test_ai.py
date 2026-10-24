@@ -135,6 +135,12 @@ async def test_draft_is_cached_until_regenerate(client, author_h, admin_h, monke
             TicketPriority.LOW,
         ),
         (
+            "Can I update my author bio?",
+            "I'd like to refresh the bio that appears on my book pages.",
+            TicketCategory.GENERAL_INQUIRY,
+            TicketPriority.LOW,
+        ),
+        (
             "Wrong ISBN on Amazon",
             "Amazon shows a different ISBN than the printed copy.",
             TicketCategory.ISBN_METADATA,

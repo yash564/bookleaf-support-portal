@@ -31,8 +31,9 @@ _KEYWORDS: dict[TicketCategory, tuple[str, ...]] = {
         "misalign",
         "quality",
         "defect",
-        "pages",
-        "cover is",
+        "misprint",
+        "pages are",
+        "author copies",
         "copies arrived",
     ),
     TicketCategory.DISTRIBUTION_AVAILABILITY: (
@@ -55,6 +56,17 @@ _KEYWORDS: dict[TicketCategory, tuple[str, ...]] = {
         "when will",
         "stage",
         "editing",
+    ),
+    # Explicit general signals so profile/how-to questions don't land in a product category on a stray word.
+    TicketCategory.GENERAL_INQUIRY: (
+        "author bio",
+        "my bio",
+        "profile",
+        "how do i",
+        "can i update",
+        "package",
+        "login",
+        "password",
     ),
 }
 
