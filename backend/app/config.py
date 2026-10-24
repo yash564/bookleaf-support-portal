@@ -5,7 +5,7 @@ Every secret and environment-specific value is read from the environment (or a l
 """
 
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     # NoDecode: read the raw "a,b,c" string from env and split it ourselves (see validator).
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
 
+    # --- AI. One provider is active at a time; keys never leave the backend. ---
+    ai_provider: Literal["auto", "anthropic", "openai"] = "auto"  # auto = anthropic if keyed, else openai
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-haiku-5-5"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
     ai_enabled: bool = True
     ai_timeout_seconds: float = 20.0
     ai_max_retries: int = 2
@@ -40,9 +44,20 @@ class Settings(BaseSettings):
         return v
 
     @property
+    def active_provider(self) -> str:
+        if self.ai_provider != "auto":
+            return self.ai_provider
+        return "anthropic" if self.anthropic_api_key else "openai"
+
+    @property
+    def active_model(self) -> str:
+        return self.openai_model if self.active_provider == "openai" else self.anthropic_model
+
+    @property
     def ai_available(self) -> bool:
-        """AI is only attempted when enabled AND a key is configured."""
-        return self.ai_enabled and bool(self.anthropic_api_key)
+        """AI is only attempted when enabled AND the active provider has a key."""
+        key = self.openai_api_key if self.active_provider == "openai" else self.anthropic_api_key
+        return self.ai_enabled and bool(key)
 
     @property
     def is_production(self) -> bool:

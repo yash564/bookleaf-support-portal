@@ -24,6 +24,8 @@ TEST_DB = "bookleaf_test"
 os.environ["DATABASE_URL"] = f"{BASE_URL}/{TEST_DB}"
 os.environ["JWT_SECRET"] = "test-secret-that-is-at-least-32-characters-long"
 os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["OPENAI_API_KEY"] = ""
+os.environ["AI_PROVIDER"] = "auto"  # tests must not inherit the developer's .env provider choice
 os.environ["AI_ENABLED"] = "true"
 
 from httpx import ASGITransport, AsyncClient  # noqa: E402

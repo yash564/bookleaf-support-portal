@@ -19,7 +19,13 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         sync: false         # https://<your-vercel-app>.vercel.app
+      - key: AI_PROVIDER
+        value: auto          # anthropic if ANTHROPIC_API_KEY is set, else openai
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-haiku-5-5
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini

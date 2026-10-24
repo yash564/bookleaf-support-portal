@@ -5,7 +5,7 @@ A two-sided support desk for BookLeaf Publishing: authors raise and follow queri
 | | |
 |---|---|
 | **Live demo** | _frontend_: `https://<vercel-app>.vercel.app` · _API docs_: `https://<render-service>.onrender.com/docs` (fill in after deploy, see [Deployment](#deployment)) |
-| **Stack** | Next.js 16 (App Router, TypeScript, Tailwind 4, TanStack Query) · FastAPI (Python 3.12, SQLAlchemy 2 async, Alembic, Pydantic v2) · PostgreSQL 16 · Anthropic Claude (`claude-haiku-5-5`) · Server-Sent Events |
+| **Stack** | Next.js 16 (App Router, TypeScript, Tailwind 4, TanStack Query) · FastAPI (Python 3.12, SQLAlchemy 2 async, Alembic, Pydantic v2) · PostgreSQL 16 · LLM via a provider adapter (Anthropic Claude Haiku 5.5 or OpenAI gpt-4o-mini, env-selected) · Server-Sent Events |
 | **Repo layout** | `backend/` API · `frontend/` web app · `docs/` architecture, write-up, plan · `docker-compose.yml` local Postgres · `render.yaml` API deploy blueprint |
 
 ## Test credentials
@@ -31,7 +31,7 @@ docker compose up -d db                      # postgres:16 on localhost:5433
 
 # 2. API
 cd backend
-cp .env.example .env                         # set ANTHROPIC_API_KEY (optional) and a 32+ char JWT_SECRET
+cp .env.example .env                         # set ANTHROPIC_API_KEY or OPENAI_API_KEY (optional) and a 32+ char JWT_SECRET
 uv sync
 uv run alembic upgrade head                  # create schema
 uv run python -m scripts.seed                # load the dataset + demo tickets (idempotent)
@@ -44,7 +44,7 @@ npm install
 npm run dev                                  # http://localhost:3000
 ```
 
-Without an `ANTHROPIC_API_KEY` the app still works end to end: tickets are classified by the rule-based fallback (clearly labelled in the UI) and the draft button explains that AI is unavailable. Add a key and restart to see the model in action.
+Without an API key the app still works end to end: tickets are classified by the rule-based fallback (clearly labelled in the UI) and the draft button explains that AI is unavailable. Add a key and restart to see the model in action.
 
 Tests (backend, 37 integration + unit tests against a throwaway `bookleaf_test` database on the same Postgres):
 
@@ -86,22 +86,23 @@ Why this shape: it mirrors how a real ops tool is built (typed contracts, thin r
 
 ## AI integration
 
-**Model**: `claude-haiku-5-5` via the official `anthropic` Python SDK, configurable with `ANTHROPIC_MODEL`. Chosen because (a) classification and support drafting are routine tasks where Haiku's quality is more than sufficient, (b) it is the cheapest current model ($0.10 / $0.50 per million input/output tokens, ~10× cheaper than Haiku 4.5), and (c) its prompt-cache minimum is 512 tokens, so the ~2k-token knowledge-base block actually gets cached (on Haiku 4.5 the minimum is 4096 and it would silently not cache). Swapping to Sonnet is one env var; prices for both are in `ai/pricing.py`.
+**Provider & model**: the AI package talks to a tiny `Provider` protocol (`parse` for structured output, `complete` for text) with two adapters in `backend/app/ai/providers.py`: **Anthropic** (`claude-haiku-5-5`) and **OpenAI** (`gpt-4o-mini`). `AI_PROVIDER=auto` picks Anthropic when its key is set, otherwise OpenAI; set it explicitly to force one. Both are the cheapest current tier of their family and more than sufficient for triage and support drafting; the live demo runs on whichever key is configured. Why Haiku 5.5 as the preferred default: $0.10 / $0.50 per million input/output tokens and explicit prompt caching (`cache_control`) with a 512-token minimum, so the ~2k-token knowledge-base block is cached and billed at 10%. On OpenAI the same static block is cached automatically (prefix ≥ 1024 tokens, billed at 50%) and surfaces as `cached_tokens`; both are recorded in the same ledger column. Prices for all supported models live in `ai/pricing.py`; swapping is one env var and nothing else changes.
 
 **Prompt strategy** (`backend/app/ai/prompts.py`, `knowledge_base.py`, `context.py`):
 1. **Classification + priority in one call**, using structured outputs (a Pydantic schema → `output_config.format`), not two calls and not free-text parsing. The system prompt defines the six categories by *underlying problem*, a four-level priority rubric with the brief's calibration pairs ("no royalty for 6 months" → CRITICAL, "update my bio" → LOW), and asks for an honest confidence and a one-line reasoning that the admin sees. `effort: low`, 400 max tokens.
 2. **Drafts** use a *static* system block — persona, tone guidelines, the full knowledge base, and the brief's seven query→response calibration examples — marked with `cache_control`, followed by a *per-ticket* user message containing: today's date, structured **author and book facts from the database** (status, ISBN, pending royalty, last payout, whether the pending amount is below the ₹1,000 threshold, the computed next payout date under the quarterly + 45-day policy, platforms), the ticket, and only the **last 3 messages truncated to 600 chars**. The model is told to quote policy specifics only when relevant, to say "we will check" rather than invent numbers, and to end with a next step. Result: drafts like "your ₹3,570 from the quarter ending 30 Sep will reach you by 14 Nov", not generic reassurance.
-3. **Drafts are generated lazily** (when an admin asks) and **cached on the ticket**; re-opening costs zero tokens; "Regenerate" is an explicit choice.
+3. **Provider-neutral prompts**: the same two prompts are sent to either provider; the static block goes in the system/instructions slot and the per-ticket block in the user turn, which is exactly the shape both caches key on.
+4. **Drafts are generated lazily** (when an admin asks) and **cached on the ticket**; re-opening costs zero tokens; "Regenerate" is an explicit choice.
 
 **Error handling / graceful degradation** (`ai/client.py`, `services/ai_service.py`):
 - Classification runs as a FastAPI `BackgroundTask` *after* the 201 is sent — an AI outage can never block ticket creation or slow it down.
-- SDK exceptions are mapped to one domain error (`AI_UNAVAILABLE`, 503) with a status for the ledger (`RATE_LIMITED`, `TIMEOUT`, `ERROR`). On failure the ticket gets a **rule-based keyword classification**, marked `FALLBACK` and labelled "Rule-based (AI was unavailable)" in the UI; the draft panel tells the admin to write manually. Admin overrides are preserved across re-classification.
+- SDK exceptions from either provider (same class names, different packages) are mapped to one domain error (`AI_UNAVAILABLE`, 503) with a status for the ledger (`RATE_LIMITED`, `TIMEOUT`, `ERROR`). On failure the ticket gets a **rule-based keyword classification**, marked `FALLBACK` and labelled "Rule-based (AI was unavailable)" in the UI; the draft panel tells the admin to write manually. Admin overrides are preserved across re-classification.
 - A **circuit breaker** opens after 3 consecutive failures for 2 minutes, so a dead API doesn't add a 20 s timeout to every ticket; the SDK's own retry/backoff handles transient 429/5xx.
 - 20 s timeout, 2 retries, structured-output validation errors treated as failures.
 
-**Cost awareness**: one call per ticket for triage, at most one per draft (cached), the static KB block is prompt-cached, history is truncated, the description is capped. Every call is written to `ai_calls` with input/output/cache-read/cache-write tokens and latency; `GET /admin/ai/usage` (and the AI Usage page) turns it into an estimated cost per purpose. Expected steady state with Haiku 5.5: roughly **$0.0002 per classified ticket and $0.0004 per draft** (≈ ₹0.05 per ticket end to end).
+**Cost awareness**: one call per ticket for triage, at most one per draft (cached), the static KB block is prompt-cached, history is truncated, the description is capped. Every call is written to `ai_calls` with input/output/cache-read/cache-write tokens and latency; `GET /admin/ai/usage` (and the AI Usage page) turns it into an estimated cost per purpose using the active model's price. Expected steady state: roughly **$0.0002–0.0004 per classified ticket and $0.0004–0.001 per draft** depending on provider (well under ₹0.10 per ticket end to end).
 
-**Key security**: `ANTHROPIC_API_KEY` is read by pydantic-settings on the backend only; the frontend never talks to Anthropic; `.env` is git-ignored and `.env.example` ships blank.
+**Key security**: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are read by pydantic-settings on the backend only; the frontend never talks to a model provider; `.env` is git-ignored and `.env.example` ships blank.
 
 ## API
 
@@ -139,7 +140,7 @@ Conventions: plural nouns, 201 on create, 204 on no content, PATCH for partial u
 The app is split so each half lands on a free tier: **Neon** (Postgres) + **Render** (API, Docker) + **Vercel** (Next.js).
 
 1. **Neon**: create a project, copy the connection string and convert it to the asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`.
-2. **Render**: *New → Blueprint* pointing at this repo (`render.yaml` is picked up). Set `DATABASE_URL`, `ANTHROPIC_API_KEY`, and `CORS_ORIGINS=https://<your-vercel-app>.vercel.app`. The container runs `alembic upgrade head` and, with `SEED_ON_START=true`, seeds the dataset on boot — flip it to `false` after the first deploy so demo data survives restarts. Free Render services sleep after idle; the first request can take ~30–50 s.
+2. **Render**: *New → Blueprint* pointing at this repo (`render.yaml` is picked up). Set `DATABASE_URL`, `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (and `AI_PROVIDER`), and `CORS_ORIGINS=https://<your-vercel-app>.vercel.app`. The container runs `alembic upgrade head` and, with `SEED_ON_START=true`, seeds the dataset on boot — flip it to `false` after the first deploy so demo data survives restarts. Free Render services sleep after idle; the first request can take ~30–50 s.
 3. **Vercel**: import the repo, set **Root Directory** to `frontend`, add `NEXT_PUBLIC_API_URL=https://<render-service>.onrender.com`. Deploy.
 4. Paste both URLs into the table at the top of this README.
 
