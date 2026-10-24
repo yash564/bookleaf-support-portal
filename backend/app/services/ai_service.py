@@ -16,7 +16,7 @@ from app.ai.classify import classify
 from app.ai.client import AiOutcome
 from app.ai.draft import draft_reply
 from app.ai.fallback import classify_by_rules
-from app.ai.pricing import estimate_cost_usd, price_for
+from app.ai.pricing import PRICES, estimate_cost_usd
 from app.config import get_settings
 from app.core.errors import AiUnavailableError
 from app.db.base import utcnow
@@ -158,14 +158,14 @@ async def get_or_create_draft(
     ticket.ai_draft_generated_at = utcnow()
     await db.commit()
     await db.refresh(ticket)
-    return DraftOut(draft=text, generated_at=ticket.ai_draft_generated_at, cached=False, model=settings.active_model)
+    return DraftOut(draft=text, generated_at=ticket.ai_draft_generated_at, cached=False, model=settings.anthropic_model)
 
 
 # ---------- usage ----------
 
 
 async def usage_report(db: AsyncSession, since: date | None) -> AiUsageOut:
-    model = get_settings().active_model
+    model = get_settings().anthropic_model
     rows = []
     total = 0
     for r in await TicketRepository(db).ai_usage(since):
@@ -178,13 +178,11 @@ async def usage_report(db: AsyncSession, since: date | None) -> AiUsageOut:
         )
         total += cost
         rows.append(AiUsageRow(**r, estimated_cost_usd=cost))
-    inp, out, cache_mult = price_for(model)
+    inp, out = PRICES.get(model, PRICES["claude-haiku-5-5"])
     return AiUsageOut(
         model=model,
         since=since,
         rows=rows,
         total_cost_usd=total,
-        pricing_note=(
-            f"Estimated at ${inp}/M input, ${out}/M output tokens; cache reads billed at {int(cache_mult * 100)}% of input."
-        ),
+        pricing_note=f"Estimated at ${inp}/M input, ${out}/M output tokens; cache reads billed at 10%, cache writes at 125% of input.",
     )

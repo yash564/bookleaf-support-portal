@@ -18,12 +18,11 @@ Companion to the README. This is the "why", organised by the things an evaluator
 │                   AuthService · ai_service (persist AI results, ledger, fallback)       │
 │  repositories/    SQL only. Author methods always take author_id.                       │
 │  realtime/        EventBroker (in-process pub/sub) · sse.event_stream (heartbeat 15s)   │
-│  ai/              providers (Anthropic | OpenAI adapters) · client (breaker, errors) ·   │
-│                   prompts · knowledge_base · context · classify · draft · fallback ·     │
-│                   pricing                                                                │
+│  ai/              client (SDK + breaker) · prompts · knowledge_base · context ·          │
+│                   classify · draft · fallback · pricing                                  │
 └───────────────┬───────────────────────────────────────────────┬─────────────────────────┘
-                │ SQLAlchemy async (asyncpg)                    │ anthropic / openai SDK (HTTPS)
-          PostgreSQL 16                                    Anthropic or OpenAI API
+                │ SQLAlchemy async (asyncpg)                    │ anthropic SDK (HTTPS)
+          PostgreSQL 16                                    Anthropic API
 ```
 
 Rule of thumb used throughout: a router never touches a model; a repository never raises an HTTP error; the AI package never imports FastAPI or SQLAlchemy.
@@ -77,7 +76,7 @@ POST /admin/tickets/{id}/ai-draft
                           └─ fail → 503 AI_UNAVAILABLE, ledger row; UI says "write manually"
 ```
 
-Provider adapters (`ai/providers.py`) expose two operations, `parse(system, user, schema)` and `complete(system, user)`, and normalise usage into one `Usage` shape (input, output, cache-read, cache-write). Classification and drafting never import an SDK. Prompt-caching layout follows the rule "stable prefix first, volatile last": tools (none) → system (frozen text, cache-marked) → messages (per ticket). Nothing time-dependent lives in the system block; the date is in the user turn. The ledger records `cache_read_input_tokens` so cache effectiveness is observable, not assumed.
+Prompt-caching layout follows the rule "stable prefix first, volatile last": tools (none) → system (frozen text, cache-marked) → messages (per ticket). Nothing time-dependent lives in the system block; the date is in the user turn. The ledger records `cache_read_input_tokens` so cache effectiveness is observable, not assumed.
 
 Why one classification call and not two: category and priority are correlated (an ISBN mismatch is high-priority *because* of the category), the structured schema makes the output deterministic to parse, and it halves the per-ticket cost.
 

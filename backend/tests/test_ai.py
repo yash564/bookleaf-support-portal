@@ -14,7 +14,6 @@ from app.ai.classify import Classification
 from app.ai.context import next_payout_deadline
 from app.ai.fallback import classify_by_rules
 from app.ai.pricing import estimate_cost_usd
-from app.ai.providers import Usage, reset_provider
 from app.config import get_settings
 from app.models.enums import AiCallStatus, TicketCategory, TicketPriority
 from app.services import ai_service
@@ -22,18 +21,16 @@ from tests.conftest import NEW_TICKET
 
 
 def _ok_outcome(**usage):
-    return ai_client.AiOutcome(AiCallStatus.OK, "claude-haiku-5-5", 120, usage=Usage(**usage))
+    return ai_client.AiOutcome(AiCallStatus.OK, "claude-haiku-5-5", 120, usage=ai_client.Usage(**usage))
 
 
 @pytest.fixture
 def ai_on(monkeypatch):
     """Pretend a key is configured so the service takes the 'call the model' branch."""
     get_settings.cache_clear()
-    reset_provider()
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     yield
     get_settings.cache_clear()
-    reset_provider()
 
 
 # ---------- degradation (no key configured) ----------
@@ -182,20 +179,6 @@ def test_pricing_estimate():
     assert cost == Decimal("0.10")
     cached = estimate_cost_usd("claude-haiku-5-5", input_tokens=0, output_tokens=0, cache_read=1_000_000, cache_write=0)
     assert cached == Decimal("0.01")
-
-
-def test_provider_selection_follows_keys_and_override(monkeypatch):
-    from app.config import Settings
-
-    base = {"_env_file": None, "jwt_secret": "x" * 32, "anthropic_api_key": None, "openai_api_key": None}
-    assert Settings(**base).ai_available is False
-    s = Settings(**{**base, "anthropic_api_key": "a"})
-    assert (s.active_provider, s.active_model, s.ai_available) == ("anthropic", "claude-haiku-5-5", True)
-    s = Settings(**{**base, "openai_api_key": "o"})
-    assert (s.active_provider, s.active_model, s.ai_available) == ("openai", "gpt-4o-mini", True)
-    # Explicit override wins even when the other key is present; missing key for it → unavailable.
-    s = Settings(**{**base, "anthropic_api_key": "a", "ai_provider": "openai"})
-    assert s.active_provider == "openai" and s.ai_available is False
 
 
 def test_circuit_breaker_opens_after_threshold_and_resets():

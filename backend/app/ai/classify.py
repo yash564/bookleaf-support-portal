@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.ai.client import AiOutcome, invoke
 from app.ai.prompts import CLASSIFY_SYSTEM
+from app.config import get_settings
 from app.models.enums import TicketCategory, TicketPriority
 
 MAX_DESCRIPTION_CHARS = 2500  # a ticket body longer than this is almost always paste; the head decides the category
@@ -29,5 +30,19 @@ def _user_message(subject: str, description: str, book_line: str | None) -> str:
 
 
 async def classify(subject: str, description: str, book_line: str | None) -> tuple[Classification, AiOutcome]:
-    user = _user_message(subject, description, book_line)
-    return await invoke(lambda p: p.parse(system=CLASSIFY_SYSTEM, user=user, schema=Classification, max_tokens=400))
+    s = get_settings()
+
+    async def _call(client):
+        resp = await client.messages.parse(
+            model=s.anthropic_model,
+            max_tokens=400,
+            system=[{"type": "text", "text": CLASSIFY_SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": _user_message(subject, description, book_line)}],
+            output_format=Classification,
+            output_config={"effort": "low"},  # triage is routine; low effort keeps it fast and cheap
+        )
+        if resp.parsed_output is None:
+            raise ValueError(f"no structured output (stop_reason={resp.stop_reason})")
+        return resp.parsed_output, resp.usage
+
+    return await invoke(_call)

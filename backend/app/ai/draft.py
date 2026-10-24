@@ -7,6 +7,7 @@ from datetime import date
 from app.ai.client import AiOutcome, invoke
 from app.ai.context import ticket_context
 from app.ai.prompts import DRAFT_SYSTEM
+from app.config import get_settings
 from app.models.enums import CATEGORY_LABELS, MessageKind, TicketCategory
 from app.models.ticket import Ticket
 
@@ -43,6 +44,21 @@ def build_user_message(ticket: Ticket, *, agent_name: str, today: date) -> str:
 
 
 async def draft_reply(ticket: Ticket, *, agent_name: str, today: date | None = None) -> tuple[str, AiOutcome]:
+    s = get_settings()
     user = build_user_message(ticket, agent_name=agent_name, today=today or date.today())
-    # Static block (persona + KB + examples) is identical for every ticket so it prompt-caches; only `user` varies.
-    return await invoke(lambda p: p.complete(system=DRAFT_SYSTEM, user=user, max_tokens=1024))
+
+    async def _call(client):
+        resp = await client.messages.create(
+            model=s.anthropic_model,
+            max_tokens=1024,
+            # Static block (persona + KB + examples) is cache-marked; only `user` varies per ticket.
+            system=[{"type": "text", "text": DRAFT_SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user}],
+            output_config={"effort": "medium"},
+        )
+        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        if not text:
+            raise ValueError(f"empty draft (stop_reason={resp.stop_reason})")
+        return text, resp.usage
+
+    return await invoke(_call)
