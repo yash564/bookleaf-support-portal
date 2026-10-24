@@ -40,14 +40,16 @@ export default function AdminTicketPage() {
 
   // ----- composer -----
   const [mode, setMode] = useState<MessageKind>("ADMIN_REPLY");
-  // `null` = untouched: the composer shows the ticket's cached AI draft (if any) until the admin types.
-  const [body, setBody] = useState<string | null>(null);
+  // Reply and note keep separate text so switching tabs never carries an AI draft into a private note.
+  // `null` reply = untouched: the composer shows the ticket's cached AI draft (if any) until the admin types.
+  const [replyBody, setReplyBody] = useState<string | null>(null);
+  const [noteBody, setNoteBody] = useState("");
   const [fromAi, setFromAi] = useState(false);
   const [draftNote, setDraftNote] = useState<string | null>(null);
   const draft = useMutation({
     mutationFn: (regenerate: boolean) => api.admin.draft(id, regenerate),
     onSuccess: (d) => {
-      setBody(d.draft);
+      setReplyBody(d.draft);
       setFromAi(true);
       setMode("ADMIN_REPLY");
       setDraftNote(d.cached ? `Cached draft from ${fmtDateTime(d.generated_at)} (no tokens spent)` : `Fresh draft from ${d.model} · review before sending`);
@@ -61,7 +63,11 @@ export default function AdminTicketPage() {
   });
   const send = useMutation({
     mutationFn: (text: string) => api.admin.message(id, mode, text),
-    onSuccess: (t) => { afterChange(t); setBody(""); setFromAi(false); setDraftNote(null); toast.push({ tone: "success", title: mode === "ADMIN_REPLY" ? "Reply sent to the author" : "Internal note added" }); },
+    onSuccess: (t) => {
+      afterChange(t);
+      if (mode === "ADMIN_REPLY") { setReplyBody(""); setFromAi(false); setDraftNote(null); } else { setNoteBody(""); }
+      toast.push({ tone: "success", title: mode === "ADMIN_REPLY" ? "Reply sent to the author" : "Internal note added" });
+    },
     onError: fail("Couldn't send"),
   });
 
@@ -71,9 +77,9 @@ export default function AdminTicketPage() {
   const book = t.book;
   const busy = update.isPending;
   const cachedDraft = t.status !== "CLOSED" ? t.ai_draft : null;
-  const shown = body ?? cachedDraft ?? "";
-  const aiBacked = fromAi || (body === null && !!cachedDraft);
-  const note = draftNote ?? (body === null && cachedDraft ? `Cached draft from ${fmtDateTime(t.ai.draft_generated_at)}` : null);
+  const shown = mode === "ADMIN_REPLY" ? (replyBody ?? cachedDraft ?? "") : noteBody;
+  const aiBacked = mode === "ADMIN_REPLY" && (fromAi || (replyBody === null && !!cachedDraft));
+  const note = draftNote ?? (replyBody === null && cachedDraft ? `Cached draft from ${fmtDateTime(t.ai.draft_generated_at)}` : null);
 
   return (
     <div>
@@ -132,7 +138,7 @@ export default function AdminTicketPage() {
                 <Wand2 className="h-3.5 w-3.5" /> AI draft grounded in the knowledge base and this author&apos;s data. {note} — edit freely before sending.
               </div>
             )}
-            <Textarea rows={9} value={shown} onChange={(e) => setBody(e.target.value)} placeholder={mode === "ADMIN_REPLY" ? "Write to the author, or click “AI draft”…" : "Private note for the team (never shown to the author)"} className={mode === "INTERNAL_NOTE" ? "bg-amber-50/40" : ""} maxLength={5000} />
+            <Textarea rows={9} value={shown} onChange={(e) => (mode === "ADMIN_REPLY" ? setReplyBody(e.target.value) : setNoteBody(e.target.value))} placeholder={mode === "ADMIN_REPLY" ? "Write to the author, or click “AI draft”…" : "Private note for the team (never shown to the author)"} className={mode === "INTERNAL_NOTE" ? "bg-amber-50/40" : ""} maxLength={5000} />
             <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
               <span>{mode === "ADMIN_REPLY" ? "Sending a reply moves the ticket to In progress and assigns it to you if unowned." : "Internal notes are visible to staff only."}</span>
               <Button loading={send.isPending} disabled={!shown.trim() || t.status === "CLOSED"} onClick={() => send.mutate(shown)} variant={mode === "INTERNAL_NOTE" ? "secondary" : "primary"}>

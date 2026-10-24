@@ -62,7 +62,7 @@ export default function AuthorTicketPage() {
         )}
       </Card>
 
-      <Thread messages={t.messages} viewer="AUTHOR" emptyText={t.status === "OPEN" ? "No reply yet. Our team usually responds within 48 hours; you&apos;ll see it here without refreshing." : "No messages."} />
+      <Thread messages={t.messages} viewer="AUTHOR" emptyText={t.status === "OPEN" ? "No reply yet. Our team usually responds within 48 hours; you’ll see it here without refreshing." : "No messages."} />
 
       <Card className="mt-4" title={closed ? "This ticket is closed" : t.status === "RESOLVED" ? "Resolved — still need help?" : "Add a follow-up"}>
         {closed ? (

@@ -36,7 +36,7 @@ async def classify(subject: str, description: str, book_line: str | None) -> tup
         resp = await client.messages.parse(
             model=s.anthropic_model,
             max_tokens=400,
-            system=[{"type": "text", "text": CLASSIFY_SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            system=[{"type": "text", "text": CLASSIFY_SYSTEM, "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
             messages=[{"role": "user", "content": _user_message(subject, description, book_line)}],
             output_format=Classification,
             output_config={"effort": "low"},  # triage is routine; low effort keeps it fast and cheap

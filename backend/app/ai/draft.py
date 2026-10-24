@@ -52,7 +52,7 @@ async def draft_reply(ticket: Ticket, *, agent_name: str, today: date | None = N
             model=s.anthropic_model,
             max_tokens=2048,
             # Static block (persona + KB + examples) is cache-marked; only `user` varies per ticket.
-            system=[{"type": "text", "text": DRAFT_SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            system=[{"type": "text", "text": DRAFT_SYSTEM, "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
             messages=[{"role": "user", "content": user}],
             # A 150-250 word support reply doesn't benefit from extended thinking, and thinking tokens
             # count against max_tokens (a 1,024 cap truncated drafts mid-sentence). Haiku 5.5 allows
