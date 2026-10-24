@@ -4,7 +4,7 @@ A two-sided support desk for BookLeaf Publishing: authors raise and follow queri
 
 | | |
 |---|---|
-| **Live demo** | _frontend_: `https://<vercel-app>.vercel.app` · _API docs_: `https://<render-service>.onrender.com/docs` (fill in after deploy, see [Deployment](#deployment)) |
+| **Live demo** | **App**: https://bookleaf-support-portal-one.vercel.app · **API docs (Swagger)**: https://bookleaf-api-szha.onrender.com/docs · health: https://bookleaf-api-szha.onrender.com/health. The API runs on Render's free tier and sleeps after ~15 min idle; the first request can take 30–50 s, after which it is fast. |
 | **Stack** | Next.js 16 (App Router, TypeScript, Tailwind 4, TanStack Query) · FastAPI (Python 3.12, SQLAlchemy 2 async, Alembic, Pydantic v2) · PostgreSQL 16 · Anthropic Claude (`claude-haiku-5-5`) · Server-Sent Events |
 | **Repo layout** | `backend/` API · `frontend/` web app · `docs/` architecture, write-up, plan · `docker-compose.yml` local Postgres · `render.yaml` API deploy blueprint |
 
@@ -143,7 +143,7 @@ The app is split so each half lands on a free tier: **Neon** (Postgres) + **Rend
 1. **Neon**: create a project, copy the connection string and convert it to the asyncpg form: `postgresql+asyncpg://user:pass@host/db?ssl=require`.
 2. **Render**: *New → Blueprint* pointing at this repo (`render.yaml` is picked up). Set `DATABASE_URL`, `ANTHROPIC_API_KEY`, and `CORS_ORIGINS=https://<your-vercel-app>.vercel.app`. The container runs `alembic upgrade head` and, with `SEED_ON_START=true`, seeds the dataset on boot — flip it to `false` after the first deploy so demo data survives restarts. Free Render services sleep after idle; the first request can take ~30–50 s.
 3. **Vercel**: import the repo, set **Root Directory** to `frontend`, add `NEXT_PUBLIC_API_URL=https://<render-service>.onrender.com`. Deploy.
-4. Paste both URLs into the table at the top of this README.
+4. Paste both URLs into the table at the top of this README (current deployment: Vercel `bookleaf-support-portal-one`, Render `bookleaf-api-szha`, Neon ap-southeast-1).
 
 ## Known limitations & what I'd do next
 
