@@ -154,4 +154,5 @@ The app is split so each half lands on a free tier: **Neon** (Postgres) + **Rend
 - **AI evaluation**: there is a rule-based fallback and a usage ledger, but no offline eval set yet. I'd log admin edits to drafts (edit distance) and overrides as implicit labels, build a 50-ticket golden set from them, and track classification accuracy and draft acceptance per prompt version (`PROMPT_VERSION` is already in code).
 - **Draft personalisation**: the draft is signed by whichever admin generates it, but cached per ticket, so a second admin sees the first one's name — easy to re-sign on send.
 - **Royalty "next payout" is computed from the quarter calendar**, not from a payouts table; a real system would read scheduled payout runs.
+- In `next dev`, the Next 16 overlay may show an "instant navigation" insight for the session-gated pages (they render nothing until the client session resolves). It is a dev-time validation only; `next build` is clean and production is unaffected.
 - SQLite is not supported for tests (the ticket-number sequence is Postgres-only); tests need the Docker Postgres.
